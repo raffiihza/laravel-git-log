@@ -1,7 +1,8 @@
 /.phpunit.cache
 /bootstrap/ssr
 /node_modules
-/public/build
+# /public/build
+# /public/mix-manifest.json
 /public/hot
 /public/storage
 /resources/js/actions
