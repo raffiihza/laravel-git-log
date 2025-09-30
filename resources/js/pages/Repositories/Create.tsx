@@ -56,7 +56,7 @@ export default function CreateRepository() {
                                         id="name"
                                         value={data.name}
                                         onChange={(e) => setData('name', e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 px-3 py-2"
                                         placeholder="My Awesome Project"
                                     />
                                     {errors.name && (
@@ -73,7 +73,7 @@ export default function CreateRepository() {
                                         id="git_log_path"
                                         value={data.git_log_path}
                                         onChange={(e) => setData('git_log_path', e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 px-3 py-2"
                                         placeholder="/path/to/your/git/repository"
                                     />
                                     <p className="mt-1 text-sm text-gray-500">
@@ -93,7 +93,7 @@ export default function CreateRepository() {
                                         rows={3}
                                         value={data.description}
                                         onChange={(e) => setData('description', e.target.value)}
-                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 px-3 py-2"
                                         placeholder="Brief description of this repository..."
                                     />
                                     {errors.description && (

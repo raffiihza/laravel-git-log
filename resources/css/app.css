@@ -141,3 +141,44 @@
         @apply bg-background text-foreground;
     }
 }
+
+/* Fix form inputs for dark mode compatibility */
+@layer utilities {
+    /* Ensure all input, select, and textarea elements are visible in dark mode */
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="url"],
+    input[type="search"],
+    textarea,
+    select {
+        background-color: white !important;
+        color: #374151 !important; /* gray-700 */
+        border: 1px solid #d1d5db !important; /* gray-300 */
+    }
+    
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="password"]:focus,
+    input[type="url"]:focus,
+    input[type="search"]:focus,
+    textarea:focus,
+    select:focus {
+        border-color: #3b82f6 !important; /* blue-500 */
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+        outline: none !important;
+    }
+    
+    /* Style select dropdown options */
+    select option {
+        background-color: white !important;
+        color: #374151 !important;
+    }
+    
+    /* Placeholder text should be visible */
+    input::placeholder,
+    textarea::placeholder {
+        color: #9ca3af !important; /* gray-400 */
+        opacity: 1 !important;
+    }
+}

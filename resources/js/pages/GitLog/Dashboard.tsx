@@ -27,16 +27,19 @@ export default function GitLogDashboard({ repositories }: Props) {
     const [gitLogData, setGitLogData] = useState<string>('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>('');
-    const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
+    const [viewMode, setViewMode] = useState<'simple' | 'detailed' | 'complete'>('simple');
 
-    const fetchGitLog = async (repository: Repository, detailed = false) => {
+    const fetchGitLog = async (repository: Repository, mode: 'simple' | 'detailed' | 'complete' = 'simple') => {
         setLoading(true);
         setError('');
         
         try {
-            const endpoint = detailed 
-                ? `/api/git-log/${repository.id}/detailed`
-                : `/api/git-log/${repository.id}`;
+            let endpoint = `/api/git-log/${repository.id}`;
+            if (mode === 'detailed') {
+                endpoint = `/api/git-log/${repository.id}/detailed`;
+            } else if (mode === 'complete') {
+                endpoint = `/api/git-log/${repository.id}/complete`;
+            }
             
             const response = await fetch(endpoint);
             const data = await response.json();
@@ -56,7 +59,7 @@ export default function GitLogDashboard({ repositories }: Props) {
 
     const refreshGitLog = () => {
         if (selectedRepo) {
-            fetchGitLog(selectedRepo, viewMode === 'detailed');
+            fetchGitLog(selectedRepo, viewMode);
         }
     };
 
@@ -122,7 +125,7 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                             ? 'border-blue-500 bg-blue-50'
                                                             : 'border-gray-200 hover:border-gray-300'
                                                     }`}
-                                                    onClick={() => fetchGitLog(repo, viewMode === 'detailed')}
+                                                    onClick={() => fetchGitLog(repo, viewMode)}
                                                 >
                                                     <h3 className="font-medium text-gray-900">{repo.name}</h3>
                                                     {repo.description && (
@@ -150,14 +153,15 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                 <select
                                                     value={viewMode}
                                                     onChange={(e) => {
-                                                        const newMode = e.target.value as 'simple' | 'detailed';
+                                                        const newMode = e.target.value as 'simple' | 'detailed' | 'complete';
                                                         setViewMode(newMode);
-                                                        fetchGitLog(selectedRepo, newMode === 'detailed');
+                                                        fetchGitLog(selectedRepo, newMode);
                                                     }}
-                                                    className="text-sm border-gray-300 rounded-md"
+                                                    className="text-sm border-gray-300 rounded-md bg-white text-gray-900 px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                 >
-                                                    <option value="simple">Simple View</option>
+                                                    <option value="simple">Graph View</option>
                                                     <option value="detailed">Detailed View</option>
+                                                    <option value="complete">Complete View (All Commits)</option>
                                                 </select>
                                                 <button
                                                     onClick={refreshGitLog}
