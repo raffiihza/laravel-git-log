@@ -7,7 +7,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
     base: '/gitstatus/',
     build: {
-        assetsDir: 'build/assets',
+        assetsDir: 'assets',
     },
     plugins: [
         laravel({
