@@ -9,12 +9,19 @@ use Inertia\Inertia;
 
 class GitLogController extends Controller
 {
+    // Timeout for git commands to prevent hanging
+    private const GIT_TIMEOUT = 10; // 10 seconds max
+
     /**
      * Display the main git log dashboard (public route)
      */
     public function index()
     {
-        $repositories = Repository::all();
+        // Only fetch repository metadata, not git logs
+        // Git logs will be loaded asynchronously via API calls
+        $repositories = Repository::select('id', 'name', 'git_log_path', 'description')
+            ->orderBy('name')
+            ->get();
         
         return Inertia::render('GitLog/Dashboard', [
             'repositories' => $repositories
@@ -23,36 +30,42 @@ class GitLogController extends Controller
 
     /**
      * Get git log for a specific repository
+     * Optimized with timeout and minimal data fetching
      */
-    public function getGitLog(Repository $repository)
+    public function getGitLog(Repository $repository, Request $request)
     {
         try {
-            // Validate that the path exists and is a git repository
-            if (!is_dir($repository->git_log_path)) {
-                return response()->json([
-                    'error' => 'Repository path does not exist'
-                ], 404);
+            $validation = $this->validateRepository($repository->git_log_path);
+            if ($validation !== true) {
+                return $validation;
             }
 
-            if (!is_dir($repository->git_log_path . '/.git')) {
-                return response()->json([
-                    'error' => 'Path is not a git repository'
-                ], 400);
+            // Check if user wants to see all branches (optional)
+            $showAllBranches = $request->query('all_branches', false);
+
+            // Build git command
+            $gitCommand = [
+                'git', 
+                '-c', "safe.directory={$repository->git_log_path}",
+                '-c', 'core.preloadindex=true', // Speed up git operations
+                '-c', 'core.fscache=true', // Enable filesystem cache
+                'log', 
+                '--graph', 
+                '--pretty=format:%h (%an, %ar) %s%d', 
+                '--abbrev-commit',
+                '--date=relative',
+                '--max-count=30'
+            ];
+
+            // Add --all flag only if requested
+            if ($showAllBranches) {
+                $gitCommand[] = '--all';
             }
 
-            // Get git log with better formatting to show all commits
+            // Optimized git log command with timeout
             $result = Process::path($repository->git_log_path)
-                ->run([
-                    'git', 
-                    '-c', "safe.directory={$repository->git_log_path}",
-                    'log', 
-                    '--graph', 
-                    '--pretty=format:%h (%an, %ar) %s%d', 
-                    '--abbrev-commit', 
-                    '--all',
-                    '--date=relative',
-                    '-30'
-                ]);
+                ->timeout(self::GIT_TIMEOUT)
+                ->run($gitCommand);
 
             if ($result->failed()) {
                 return response()->json([
@@ -61,10 +74,15 @@ class GitLogController extends Controller
             }
 
             return response()->json([
-                'repository' => $repository,
-                'git_log' => $result->output()
+                'repository' => $repository->only(['id', 'name', 'description']),
+                'git_log' => $result->output(),
+                'timestamp' => now()->toISOString()
             ]);
 
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            return response()->json([
+                'error' => 'Git command timed out. Repository might be too large or unresponsive.'
+            ], 504);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'An error occurred: ' . $e->getMessage()
@@ -74,36 +92,42 @@ class GitLogController extends Controller
 
     /**
      * Get detailed git log for a specific repository
+     * Optimized with timeout and limited commits
      */
-    public function getDetailedGitLog(Repository $repository)
+    public function getDetailedGitLog(Repository $repository, Request $request)
     {
         try {
-            // Validate that the path exists and is a git repository
-            if (!is_dir($repository->git_log_path)) {
-                return response()->json([
-                    'error' => 'Repository path does not exist'
-                ], 404);
+            $validation = $this->validateRepository($repository->git_log_path);
+            if ($validation !== true) {
+                return $validation;
             }
 
-            if (!is_dir($repository->git_log_path . '/.git')) {
-                return response()->json([
-                    'error' => 'Path is not a git repository'
-                ], 400);
+            // Check if user wants to see all branches (optional)
+            $showAllBranches = $request->query('all_branches', false);
+
+            // Build git command
+            $gitCommand = [
+                'git', 
+                '-c', "safe.directory={$repository->git_log_path}",
+                '-c', 'core.preloadindex=true',
+                '-c', 'core.fscache=true',
+                'log', 
+                '--graph', 
+                '--pretty=format:%h - %an, %ar : %s%n%b', 
+                '--abbrev-commit',
+                '--date=relative',
+                '--max-count=20'
+            ];
+
+            // Add --all flag only if requested
+            if ($showAllBranches) {
+                $gitCommand[] = '--all';
             }
 
-            // Get detailed git log with full commit information
+            // Optimized detailed git log with timeout
             $result = Process::path($repository->git_log_path)
-                ->run([
-                    'git', 
-                    '-c', "safe.directory={$repository->git_log_path}",
-                    'log', 
-                    '--graph', 
-                    '--pretty=format:%h - %an, %ar : %s%n%b', 
-                    '--abbrev-commit', 
-                    '--all',
-                    '--date=relative',
-                    '-20'
-                ]);
+                ->timeout(self::GIT_TIMEOUT)
+                ->run($gitCommand);
 
             if ($result->failed()) {
                 return response()->json([
@@ -112,10 +136,15 @@ class GitLogController extends Controller
             }
 
             return response()->json([
-                'repository' => $repository,
-                'git_log' => $result->output()
+                'repository' => $repository->only(['id', 'name', 'description']),
+                'git_log' => $result->output(),
+                'timestamp' => now()->toISOString()
             ]);
 
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            return response()->json([
+                'error' => 'Git command timed out. Repository might be too large or unresponsive.'
+            ], 504);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'An error occurred: ' . $e->getMessage()
@@ -125,36 +154,42 @@ class GitLogController extends Controller
 
     /**
      * Get complete git log showing all commits (no graph, just chronological)
+     * Optimized without merge commits for faster response
      */
-    public function getCompleteGitLog(Repository $repository)
+    public function getCompleteGitLog(Repository $repository, Request $request)
     {
         try {
-            // Validate that the path exists and is a git repository
-            if (!is_dir($repository->git_log_path)) {
-                return response()->json([
-                    'error' => 'Repository path does not exist'
-                ], 404);
+            $validation = $this->validateRepository($repository->git_log_path);
+            if ($validation !== true) {
+                return $validation;
             }
 
-            if (!is_dir($repository->git_log_path . '/.git')) {
-                return response()->json([
-                    'error' => 'Path is not a git repository'
-                ], 400);
+            // Check if user wants to see all branches (optional)
+            $showAllBranches = $request->query('all_branches', false);
+
+            // Build git command
+            $gitCommand = [
+                'git', 
+                '-c', "safe.directory={$repository->git_log_path}",
+                '-c', 'core.preloadindex=true',
+                '-c', 'core.fscache=true',
+                'log', 
+                '--pretty=format:%h (%an, %ar) %s%d', 
+                '--abbrev-commit',
+                '--date=relative',
+                '--no-merges',
+                '--max-count=30'
+            ];
+
+            // Add --all flag only if requested
+            if ($showAllBranches) {
+                $gitCommand[] = '--all';
             }
 
-            // Get complete git log showing all commits chronologically
+            // Optimized complete git log - no merges, faster parsing
             $result = Process::path($repository->git_log_path)
-                ->run([
-                    'git', 
-                    '-c', "safe.directory={$repository->git_log_path}",
-                    'log', 
-                    '--pretty=format:%h (%an, %ar) %s%d', 
-                    '--abbrev-commit', 
-                    '--all',
-                    '--date=relative',
-                    '--no-merges',
-                    '-30'
-                ]);
+                ->timeout(self::GIT_TIMEOUT)
+                ->run($gitCommand);
 
             if ($result->failed()) {
                 return response()->json([
@@ -163,14 +198,40 @@ class GitLogController extends Controller
             }
 
             return response()->json([
-                'repository' => $repository,
-                'git_log' => $result->output()
+                'repository' => $repository->only(['id', 'name', 'description']),
+                'git_log' => $result->output(),
+                'timestamp' => now()->toISOString()
             ]);
 
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            return response()->json([
+                'error' => 'Git command timed out. Repository might be too large or unresponsive.'
+            ], 504);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'An error occurred: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Validate repository path and git directory
+     * Returns true if valid, JsonResponse if invalid
+     */
+    private function validateRepository(string $gitPath)
+    {
+        if (!is_dir($gitPath)) {
+            return response()->json([
+                'error' => 'Repository path does not exist'
+            ], 404);
+        }
+
+        if (!is_dir($gitPath . '/.git')) {
+            return response()->json([
+                'error' => 'Path is not a git repository'
+            ], 400);
+        }
+
+        return true;
     }
 }

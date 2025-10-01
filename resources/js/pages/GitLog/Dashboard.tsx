@@ -28,8 +28,9 @@ export default function GitLogDashboard({ repositories }: Props) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>('');
     const [viewMode, setViewMode] = useState<'simple' | 'detailed' | 'complete'>('simple');
+    const [showAllBranches, setShowAllBranches] = useState(false);
 
-    const fetchGitLog = async (repository: Repository, mode: 'simple' | 'detailed' | 'complete' = 'simple') => {
+    const fetchGitLog = async (repository: Repository, mode: 'simple' | 'detailed' | 'complete' = 'simple', allBranches: boolean = false) => {
         setLoading(true);
         setError('');
         
@@ -41,17 +42,43 @@ export default function GitLogDashboard({ repositories }: Props) {
                 endpoint = `/api/git-log/${repository.id}/complete`;
             }
             
-            const response = await fetch(endpoint);
+            // Add all_branches parameter if enabled
+            if (allBranches) {
+                endpoint += '?all_branches=true';
+            }
+            
+            // Add timeout to fetch request (15 seconds)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            const response = await fetch(endpoint, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
             const data = await response.json();
             
             if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please wait a moment before refreshing.');
+                } else if (response.status === 504) {
+                    throw new Error('Request timed out. The repository might be too large or busy.');
+                }
                 throw new Error(data.error || 'Failed to fetch git log');
             }
             
             setGitLogData(data.git_log);
             setSelectedRepo(repository);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred');
+            if (err instanceof Error) {
+                if (err.name === 'AbortError') {
+                    setError('Request timed out. Please try again or select a different view mode.');
+                } else {
+                    setError(err.message);
+                }
+            } else {
+                setError('An error occurred');
+            }
         } finally {
             setLoading(false);
         }
@@ -59,7 +86,7 @@ export default function GitLogDashboard({ repositories }: Props) {
 
     const refreshGitLog = () => {
         if (selectedRepo) {
-            fetchGitLog(selectedRepo, viewMode);
+            fetchGitLog(selectedRepo, viewMode, showAllBranches);
         }
     };
 
@@ -125,7 +152,7 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                             ? 'border-blue-500 bg-blue-50'
                                                             : 'border-gray-200 hover:border-gray-300'
                                                     }`}
-                                                    onClick={() => fetchGitLog(repo, viewMode)}
+                                                    onClick={() => fetchGitLog(repo, viewMode, showAllBranches)}
                                                 >
                                                     <h3 className="font-medium text-gray-900">{repo.name}</h3>
                                                     {repo.description && (
@@ -149,13 +176,13 @@ export default function GitLogDashboard({ repositories }: Props) {
                                             {selectedRepo ? `Git Log - ${selectedRepo.name}` : 'Select a Repository'}
                                         </h2>
                                         {selectedRepo && (
-                                            <div className="flex items-center space-x-2">
+                                            <div className="flex items-center space-x-3">
                                                 <select
                                                     value={viewMode}
                                                     onChange={(e) => {
                                                         const newMode = e.target.value as 'simple' | 'detailed' | 'complete';
                                                         setViewMode(newMode);
-                                                        fetchGitLog(selectedRepo, newMode);
+                                                        fetchGitLog(selectedRepo, newMode, showAllBranches);
                                                     }}
                                                     className="text-sm border-gray-300 rounded-md bg-white text-gray-900 px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                 >
@@ -163,6 +190,19 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                     <option value="detailed">Detailed View</option>
                                                     <option value="complete">Complete View (All Commits)</option>
                                                 </select>
+                                                <label className="flex items-center space-x-2 text-sm text-gray-700 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={showAllBranches}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            setShowAllBranches(checked);
+                                                            fetchGitLog(selectedRepo, viewMode, checked);
+                                                        }}
+                                                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                    />
+                                                    <span>All Branches</span>
+                                                </label>
                                                 <button
                                                     onClick={refreshGitLog}
                                                     disabled={loading}

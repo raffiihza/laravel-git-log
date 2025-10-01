@@ -8,10 +8,12 @@ use Inertia\Inertia;
 // Public route for git log dashboard
 Route::get('/', [GitLogController::class, 'index'])->name('home');
 
-// API routes for git log data (public)
-Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');
-Route::get('/api/git-log/{repository}/detailed', [GitLogController::class, 'getDetailedGitLog'])->name('api.git-log.detailed');
-Route::get('/api/git-log/{repository}/complete', [GitLogController::class, 'getCompleteGitLog'])->name('api.git-log.complete');
+// API routes for git log data (public but rate limited)
+Route::middleware('throttle:30,1')->group(function () {
+    Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');
+    Route::get('/api/git-log/{repository}/detailed', [GitLogController::class, 'getDetailedGitLog'])->name('api.git-log.detailed');
+    Route::get('/api/git-log/{repository}/complete', [GitLogController::class, 'getCompleteGitLog'])->name('api.git-log.complete');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
