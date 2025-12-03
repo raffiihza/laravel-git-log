@@ -127,7 +127,7 @@ class FrontendController extends Controller
     {
         $carbonTime = Carbon::createFromTimestamp($timestamp, 'Asia/Jakarta');
         $now = Carbon::now('Asia/Jakarta');
-        $diff = $now->diffInSeconds($carbonTime);
+        $diff = abs($now->diffInSeconds($carbonTime));
         
         if ($diff < 60) {
             return 'Just now';
