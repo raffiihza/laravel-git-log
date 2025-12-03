@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
@@ -24,11 +25,12 @@ class FrontendController extends Controller
                 
                 foreach ($items as $item) {
                     $modifiedTime = File::lastModified($item);
+                    $carbonTime = Carbon::createFromTimestamp($modifiedTime, 'Asia/Jakarta');
                     $folders[] = [
                         'name' => basename($item),
                         'path' => $item,
                         'modified_at' => $modifiedTime,
-                        'modified_at_formatted' => date('M j H:i', $modifiedTime),
+                        'modified_at_formatted' => $carbonTime->format('M j H:i'),
                         'modified_at_human' => $this->humanReadableTime($modifiedTime),
                     ];
                 }
@@ -60,11 +62,12 @@ class FrontendController extends Controller
             
             foreach ($items as $item) {
                 $modifiedTime = File::lastModified($item);
+                $carbonTime = Carbon::createFromTimestamp($modifiedTime, 'Asia/Jakarta');
                 $folders[] = [
                     'name' => basename($item),
                     'path' => $item,
                     'modified_at' => $modifiedTime,
-                    'modified_at_formatted' => date('M j H:i', $modifiedTime),
+                    'modified_at_formatted' => $carbonTime->format('M j H:i'),
                     'modified_at_human' => $this->humanReadableTime($modifiedTime),
                 ];
             }
@@ -118,11 +121,13 @@ class FrontendController extends Controller
     }
 
     /**
-     * Convert timestamp to human readable time
+     * Convert timestamp to human readable time (Asia/Jakarta timezone)
      */
     private function humanReadableTime(int $timestamp): string
     {
-        $diff = time() - $timestamp;
+        $carbonTime = Carbon::createFromTimestamp($timestamp, 'Asia/Jakarta');
+        $now = Carbon::now('Asia/Jakarta');
+        $diff = $now->diffInSeconds($carbonTime);
         
         if ($diff < 60) {
             return 'Just now';
@@ -136,7 +141,7 @@ class FrontendController extends Controller
             $days = floor($diff / 86400);
             return $days . ' day' . ($days > 1 ? 's' : '') . ' ago';
         } else {
-            return date('M j, Y', $timestamp);
+            return $carbonTime->format('M j, Y');
         }
     }
 }
