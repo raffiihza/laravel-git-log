@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\FrontendController;
 use App\Http\Controllers\GitLogController;
 use App\Http\Controllers\RepositoryController;
 use Illuminate\Support\Facades\Route;
@@ -8,11 +9,15 @@ use Inertia\Inertia;
 // Public route for git log dashboard
 Route::get('/', [GitLogController::class, 'index'])->name('home');
 
+// Public route for frontend projects dashboard
+Route::get('/frontend', [FrontendController::class, 'index'])->name('frontend.index');
+
 // API routes for git log data (public but rate limited)
 Route::middleware('throttle:30,1')->group(function () {
     Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');
     Route::get('/api/git-log/{repository}/detailed', [GitLogController::class, 'getDetailedGitLog'])->name('api.git-log.detailed');
     Route::get('/api/git-log/{repository}/complete', [GitLogController::class, 'getCompleteGitLog'])->name('api.git-log.complete');
+    Route::get('/api/frontend/folders', [FrontendController::class, 'getFolders'])->name('api.frontend.folders');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -22,6 +27,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Protected routes for repository CRUD
     Route::resource('repositories', RepositoryController::class);
+
+    // Frontend settings (admin only)
+    Route::get('/frontend/settings', [FrontendController::class, 'settings'])->name('frontend.settings');
+    Route::post('/frontend/settings', [FrontendController::class, 'updateSettings'])->name('frontend.settings.update');
 });
 
 require __DIR__.'/settings.php';
