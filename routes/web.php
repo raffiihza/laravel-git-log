@@ -16,6 +16,9 @@ Route::get('/frontend', [FrontendController::class, 'index'])->name('frontend.in
 // Public route for project logs dashboard
 Route::get('/project-logs', [ProjectLogController::class, 'publicIndex'])->name('project-logs.public');
 
+// Public route for viewing individual log file
+Route::get('/project-logs/{projectLog}/view', [ProjectLogController::class, 'viewLogFile'])->name('project-logs.view');
+
 // API routes for git log data (public but rate limited)
 Route::middleware('throttle:30,1')->group(function () {
     Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');

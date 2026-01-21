@@ -20,13 +20,6 @@ interface ProjectLog {
     updated_at: string;
 }
 
-interface LogContent {
-    content: string;
-    filename: string;
-    size: number;
-    modified: string;
-}
-
 interface Props {
     projectLogs: ProjectLog[];
 }
@@ -35,10 +28,7 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
     const { auth } = usePage<SharedData>().props;
     const [selectedProject, setSelectedProject] = useState<ProjectLog | null>(null);
     const [logFiles, setLogFiles] = useState<LogFile[]>([]);
-    const [selectedFile, setSelectedFile] = useState<string | null>(null);
-    const [logContent, setLogContent] = useState<LogContent | null>(null);
     const [loadingFiles, setLoadingFiles] = useState(false);
-    const [loadingContent, setLoadingContent] = useState(false);
     const [error, setError] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -50,8 +40,6 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
 
     const selectProject = async (project: ProjectLog) => {
         setSelectedProject(project);
-        setSelectedFile(null);
-        setLogContent(null);
         setSearchQuery('');
         await fetchLogFiles(project.id);
     };
@@ -77,35 +65,6 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
         }
     };
 
-    const fetchLogContent = async (filename: string) => {
-        if (!selectedProject) return;
-        
-        setLoadingContent(true);
-        setError('');
-        setSelectedFile(filename);
-
-        try {
-            const response = await fetch(`/api/project-logs/${selectedProject.id}/content?file=${encodeURIComponent(filename)}`);
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Gagal membaca file log');
-            }
-
-            setLogContent(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
-        } finally {
-            setLoadingContent(false);
-        }
-    };
-
-    const refreshLogContent = () => {
-        if (selectedFile) {
-            fetchLogContent(selectedFile);
-        }
-    };
-
     const refreshFileList = () => {
         if (selectedProject) {
             fetchLogFiles(selectedProject.id);
@@ -118,6 +77,12 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const openLogFile = (file: LogFile) => {
+        if (!selectedProject) return;
+        const url = `/project-logs/${selectedProject.id}/view?file=${encodeURIComponent(file.name)}`;
+        window.open(url, '_blank');
     };
 
     // Filter log files based on search query
@@ -178,10 +143,11 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
                         </div>
                     </div>
                 ) : (
-                    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                        {/* Project Selection - Dropdown for many projects */}
-                        <div className="bg-white shadow rounded-lg mb-6">
-                            <div className="px-4 py-4 sm:px-6">
+                    <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                        {/* File Manager Container */}
+                        <div className="bg-white shadow rounded-lg overflow-hidden">
+                            {/* Toolbar */}
+                            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
                                 <div className="flex flex-wrap items-center justify-between gap-4">
                                     <div className="flex items-center space-x-4">
                                         <label htmlFor="project-select" className="text-sm font-medium text-gray-700">
@@ -194,7 +160,7 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
                                                 const project = projectLogs.find(p => p.id === parseInt(e.target.value));
                                                 if (project) selectProject(project);
                                             }}
-                                            className="block w-64 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md bg-white text-gray-900"
+                                            className="block w-56 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md bg-white text-gray-900"
                                         >
                                             {projectLogs.map((project) => (
                                                 <option key={project.id} value={project.id}>
@@ -202,167 +168,116 @@ export default function PublicProjectLogs({ projectLogs }: Props) {
                                                 </option>
                                             ))}
                                         </select>
+                                        <button
+                                            onClick={refreshFileList}
+                                            disabled={loadingFiles}
+                                            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                                            title="Refresh daftar file"
+                                        >
+                                            <svg className={`h-4 w-4 ${loadingFiles ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                    {selectedProject?.description && (
-                                        <p className="text-sm text-gray-500 flex-1 text-right">
-                                            {selectedProject.description}
-                                        </p>
-                                    )}
+                                    <div className="flex items-center space-x-2">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Cari file..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="w-64 pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
+                                            />
+                                            <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedProject?.description && (
+                                    <p className="mt-2 text-sm text-gray-500">{selectedProject.description}</p>
+                                )}
+                            </div>
+
+                            {/* File List Header */}
+                            <div className="bg-gray-100 border-b border-gray-200 px-4 py-2">
+                                <div className="grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <div className="col-span-6">Nama File</div>
+                                    <div className="col-span-3 text-right">Ukuran</div>
+                                    <div className="col-span-3 text-right">Terakhir Diubah</div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                             {/* File List */}
-                            <div className="lg:col-span-1">
-                                <div className="bg-white shadow rounded-lg sticky top-6">
-                                    <div className="px-4 py-4 border-b border-gray-200">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h2 className="text-lg font-medium text-gray-900">
-                                                File Log
-                                                {logFiles.length > 0 && (
-                                                    <span className="ml-2 text-sm font-normal text-gray-500">
-                                                        ({filteredLogFiles.length}/{logFiles.length})
-                                                    </span>
-                                                )}
-                                            </h2>
-                                            <button
-                                                onClick={refreshFileList}
-                                                disabled={loadingFiles}
-                                                className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-                                                title="Refresh daftar file"
-                                            >
-                                                <svg className={`h-5 w-5 ${loadingFiles ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <div className="divide-y divide-gray-100 max-h-[calc(100vh-300px)] overflow-y-auto">
+                                {loadingFiles ? (
+                                    <div className="flex justify-center items-center py-12">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                        <span className="ml-3 text-gray-500">Memuat...</span>
+                                    </div>
+                                ) : error ? (
+                                    <div className="p-4">
+                                        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                                            <div className="flex">
+                                                <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                                                 </svg>
-                                            </button>
-                                        </div>
-                                        {/* Search input */}
-                                        <input
-                                            type="text"
-                                            placeholder="Cari file log..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900"
-                                        />
-                                    </div>
-                                    <div className="p-2">
-                                        {loadingFiles ? (
-                                            <div className="flex justify-center items-center py-8">
-                                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                                <p className="ml-3 text-sm text-red-700">{error}</p>
                                             </div>
-                                        ) : filteredLogFiles.length === 0 ? (
-                                            <p className="text-sm text-gray-500 text-center py-4">
-                                                {searchQuery ? 'Tidak ada file yang cocok.' : 'Tidak ada file log ditemukan.'}
-                                            </p>
-                                        ) : (
-                                            <ul className="divide-y divide-gray-100 max-h-[calc(100vh-350px)] overflow-y-auto">
-                                                {filteredLogFiles.map((file, index) => (
-                                                    <li key={file.name}>
-                                                        <button
-                                                            onClick={() => fetchLogContent(file.name)}
-                                                            className={`w-full text-left px-3 py-2.5 hover:bg-gray-50 rounded-md transition-colors ${selectedFile === file.name ? 'bg-blue-50 border-l-4 border-blue-500' : ''}`}
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center">
-                                                                        {index === 0 && !searchQuery && (
-                                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mr-2">
-                                                                                Terbaru
-                                                                            </span>
-                                                                        )}
-                                                                        <p className="text-sm font-medium text-gray-900 truncate">
-                                                                            {file.name}
-                                                                        </p>
-                                                                    </div>
-                                                                    <p className="text-xs text-gray-500 mt-0.5">
-                                                                        {formatFileSize(file.size)}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        </button>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
+                                        </div>
                                     </div>
-                                </div>
+                                ) : filteredLogFiles.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <p className="mt-2 text-sm text-gray-500">
+                                            {searchQuery ? 'Tidak ada file yang cocok.' : 'Tidak ada file log ditemukan.'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    filteredLogFiles.map((file, index) => (
+                                        <button
+                                            key={file.name}
+                                            onClick={() => openLogFile(file)}
+                                            className="w-full px-4 py-3 hover:bg-blue-50 transition-colors text-left focus:outline-none focus:bg-blue-50"
+                                        >
+                                            <div className="grid grid-cols-12 gap-4 items-center">
+                                                <div className="col-span-6 flex items-center min-w-0">
+                                                    <svg className="h-5 w-5 text-gray-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    <div className="flex items-center min-w-0">
+                                                        {index === 0 && !searchQuery && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mr-2 flex-shrink-0">
+                                                                Terbaru
+                                                            </span>
+                                                        )}
+                                                        <span className="text-sm font-medium text-gray-900 truncate">
+                                                            {file.name}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="col-span-3 text-right">
+                                                    <span className="text-sm text-gray-500">{formatFileSize(file.size)}</span>
+                                                </div>
+                                                <div className="col-span-3 text-right">
+                                                    <span className="text-sm text-gray-500">{file.modified_formatted}</span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))
+                                )}
                             </div>
 
-                            {/* Log Content */}
-                            <div className="lg:col-span-3">
-                                <div className="bg-white shadow rounded-lg">
-                                    <div className="px-4 py-4 border-b border-gray-200">
-                                        <div className="flex items-center justify-between">
-                                            <h2 className="text-lg font-medium text-gray-900">
-                                                Isi Log
-                                                {logContent && (
-                                                    <span className="ml-2 text-sm font-normal text-gray-500">
-                                                        - {logContent.filename}
-                                                    </span>
-                                                )}
-                                            </h2>
-                                            {selectedFile && (
-                                                <button
-                                                    onClick={refreshLogContent}
-                                                    disabled={loadingContent}
-                                                    className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-                                                >
-                                                    <svg className={`h-4 w-4 mr-1.5 ${loadingContent ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                    </svg>
-                                                    Refresh
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="p-4">
-                                        {loadingContent && (
-                                            <div className="flex justify-center items-center py-12">
-                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                                <span className="ml-3 text-gray-500">Memuat...</span>
-                                            </div>
-                                        )}
-
-                                        {error && (
-                                            <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                                                <div className="flex">
-                                                    <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                                    </svg>
-                                                    <p className="ml-3 text-sm text-red-700">{error}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {!loadingContent && !error && !logContent && (
-                                            <div className="text-center py-12">
-                                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                                <p className="mt-2 text-sm text-gray-500">
-                                                    Pilih file log dari daftar untuk melihat isinya
-                                                </p>
-                                                <p className="mt-1 text-xs text-gray-400">
-                                                    Isi log akan ditampilkan dengan urutan terbalik (terbaru di atas)
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {!loadingContent && !error && logContent && (
-                                            <div>
-                                                <div className="mb-3 flex items-center justify-between text-sm text-gray-500">
-                                                    <span>Ukuran: {formatFileSize(logContent.size)}</span>
-                                                    <span>Terakhir diubah: {logContent.modified}</span>
-                                                </div>
-                                                <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-300px)]">
-                                                    <pre className="text-sm text-green-400 whitespace-pre-wrap break-words font-mono">
-                                                        {logContent.content || '(File kosong)'}
-                                                    </pre>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                            {/* Footer */}
+                            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
+                                <div className="flex items-center justify-between text-sm text-gray-500">
+                                    <span>
+                                        {filteredLogFiles.length} file{filteredLogFiles.length !== 1 ? '' : ''} 
+                                        {searchQuery && logFiles.length !== filteredLogFiles.length && ` (dari ${logFiles.length} total)`}
+                                    </span>
+                                    <span className="text-xs">Klik file untuk membuka di tab baru</span>
                                 </div>
                             </div>
                         </div>

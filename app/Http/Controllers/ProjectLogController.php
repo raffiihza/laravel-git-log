@@ -206,4 +206,53 @@ class ProjectLogController extends Controller
             'logFiles' => $logFiles
         ]);
     }
+
+    /**
+     * View a specific log file in a dedicated page
+     */
+    public function viewLogFile(ProjectLog $projectLog, Request $request)
+    {
+        if (!$projectLog->is_active) {
+            abort(404, 'Project log not active');
+        }
+
+        $filename = $request->query('file');
+        
+        if (!$filename) {
+            abort(400, 'File name is required');
+        }
+
+        $filePath = rtrim($projectLog->log_path, '/') . '/' . basename($filename);
+
+        if (!File::exists($filePath)) {
+            abort(404, 'File not found');
+        }
+
+        // Security check: make sure the file is within the log path
+        $realLogPath = realpath($projectLog->log_path);
+        $realFilePath = realpath($filePath);
+        
+        if ($realLogPath === false || $realFilePath === false || !str_starts_with($realFilePath, $realLogPath)) {
+            abort(403, 'Access denied');
+        }
+
+        try {
+            $content = File::get($filePath);
+            
+            // Reverse the content (newest entries at top)
+            $lines = explode("\n", $content);
+            $reversedLines = array_reverse($lines);
+            $reversedContent = implode("\n", $reversedLines);
+            
+            return Inertia::render('ProjectLogs/ViewLog', [
+                'projectLog' => $projectLog,
+                'filename' => $filename,
+                'content' => $reversedContent,
+                'size' => File::size($filePath),
+                'modified' => date('Y-m-d H:i:s', File::lastModified($filePath)),
+            ]);
+        } catch (\Exception $e) {
+            abort(500, 'Failed to read file: ' . $e->getMessage());
+        }
+    }
 }
