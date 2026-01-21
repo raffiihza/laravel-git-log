@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\FrontendController;
 use App\Http\Controllers\GitLogController;
+use App\Http\Controllers\ProjectLogController;
 use App\Http\Controllers\RepositoryController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -12,12 +13,17 @@ Route::get('/', [GitLogController::class, 'index'])->name('home');
 // Public route for frontend projects dashboard
 Route::get('/frontend', [FrontendController::class, 'index'])->name('frontend.index');
 
+// Public route for project logs dashboard
+Route::get('/project-logs', [ProjectLogController::class, 'publicIndex'])->name('project-logs.public');
+
 // API routes for git log data (public but rate limited)
 Route::middleware('throttle:30,1')->group(function () {
     Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');
     Route::get('/api/git-log/{repository}/detailed', [GitLogController::class, 'getDetailedGitLog'])->name('api.git-log.detailed');
     Route::get('/api/git-log/{repository}/complete', [GitLogController::class, 'getCompleteGitLog'])->name('api.git-log.complete');
     Route::get('/api/frontend/folders', [FrontendController::class, 'getFolders'])->name('api.frontend.folders');
+    Route::get('/api/project-logs/{projectLog}/files', [ProjectLogController::class, 'getPublicLogFiles'])->name('api.project-logs.files');
+    Route::get('/api/project-logs/{projectLog}/content', [ProjectLogController::class, 'getLogContent'])->name('api.project-logs.content');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -27,6 +33,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // Protected routes for repository CRUD
     Route::resource('repositories', RepositoryController::class);
+
+    // Protected routes for project logs CRUD
+    Route::resource('project-logs/manage', ProjectLogController::class, ['as' => 'project-logs', 'parameters' => ['manage' => 'projectLog']]);
 
     // Frontend settings (admin only)
     Route::get('/frontend/settings', [FrontendController::class, 'settings'])->name('frontend.settings');
