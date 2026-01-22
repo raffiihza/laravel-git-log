@@ -259,16 +259,30 @@ class GitLogController extends Controller
                 ], 400);
             }
 
-            // Get execution mode (sudo or user)
-            $mode = config('gitpull.mode', 'sudo');
+            // Get execution mode and user
+            $mode = config('gitpull.mode', 'user');
+            $targetUser = config('gitpull.user', 'www-data');
+
+            // Security: Validate target user for shell injection
+            if ($mode === 'user' && !$this->isValidUsername($targetUser)) {
+                return response()->json([
+                    'error' => 'Invalid GIT_PULL_USER configuration. Username must contain only alphanumeric characters, underscores, or hyphens.'
+                ], 500);
+            }
 
             // Execute git pull script with repository path as argument
-            if ($mode === 'user') {
-                // User mode: Run script directly without sudo (simpler, no root needed)
+            if ($mode === 'direct') {
+                // Direct mode: Run script directly without sudo
                 $result = Process::timeout($timeout)
                     ->run([$scriptPath, $repoPath]);
+            } elseif ($mode === 'user') {
+                // User mode: Run script with sudo as a specific user (not root)
+                // Requires visudo: www-data ALL=(targetUser) NOPASSWD: /path/to/script
+                $result = Process::timeout($timeout)
+                    ->run(['sudo', '-u', $targetUser, $scriptPath, $repoPath]);
             } else {
-                // Sudo mode: Run script with sudo (requires visudo configuration)
+                // Sudo mode: Run script with sudo as root
+                // Requires visudo: www-data ALL=(ALL) NOPASSWD: /path/to/script
                 $result = Process::timeout($timeout)
                     ->run(['sudo', $scriptPath, $repoPath]);
             }
@@ -366,5 +380,16 @@ class GitLogController extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * Validate username for shell injection
+     * Only allow safe characters (alphanumeric, underscore, hyphen)
+     */
+    private function isValidUsername(string $username): bool
+    {
+        // Username must only contain alphanumeric, underscore, or hyphen
+        // This matches standard Linux username conventions
+        return preg_match('/^[a-zA-Z0-9_\-]+$/', $username) === 1;
     }
 }
