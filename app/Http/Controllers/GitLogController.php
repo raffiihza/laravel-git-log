@@ -215,6 +215,67 @@ class GitLogController extends Controller
     }
 
     /**
+     * Execute git pull for a specific repository
+     * Protected route - requires authentication
+     */
+    public function gitPull(Repository $repository)
+    {
+        try {
+            $validation = $this->validateRepository($repository->git_log_path);
+            if ($validation !== true) {
+                return $validation;
+            }
+
+            $scriptPath = config('gitpull.script_path');
+            $timeout = config('gitpull.timeout', 60);
+
+            // Security: Validate script path exists
+            if (!file_exists($scriptPath)) {
+                return response()->json([
+                    'error' => 'Git pull script not found. Please check GIT_PULL.md for setup instructions.',
+                    'script_path' => $scriptPath
+                ], 500);
+            }
+
+            // Security: Validate script is executable
+            if (!is_executable($scriptPath)) {
+                return response()->json([
+                    'error' => 'Git pull script is not executable. Please check GIT_PULL.md for setup instructions.'
+                ], 500);
+            }
+
+            // Execute git pull script with repository path as argument
+            // Using sudo to run as the configured user (requires visudo configuration)
+            $result = Process::timeout($timeout)
+                ->run(['sudo', $scriptPath, $repository->git_log_path]);
+
+            if ($result->failed()) {
+                return response()->json([
+                    'error' => 'Git pull failed: ' . $result->errorOutput(),
+                    'output' => $result->output()
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Git pull completed successfully',
+                'repository' => $repository->only(['id', 'name', 'description']),
+                'output' => $result->output(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            return response()->json([
+                'error' => 'Git pull timed out. The repository might be large or the network is slow.'
+            ], 504);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Validate repository path and git directory
      * Returns true if valid, JsonResponse if invalid
      */

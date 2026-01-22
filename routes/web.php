@@ -29,6 +29,11 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/api/project-logs/{projectLog}/content', [ProjectLogController::class, 'getLogContent'])->name('api.project-logs.content');
 });
 
+// Protected API route for git pull (requires authentication)
+Route::middleware(['auth', 'verified', 'throttle:10,1'])->group(function () {
+    Route::post('/api/git-pull/{repository}', [GitLogController::class, 'gitPull'])->name('api.git-pull');
+});
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');
