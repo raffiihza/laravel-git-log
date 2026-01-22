@@ -229,6 +229,13 @@ class GitLogController extends Controller
             $scriptPath = config('gitpull.script_path');
             $timeout = config('gitpull.timeout', 60);
 
+            // Security: Validate script path doesn't contain shell injection characters
+            if (!$this->isValidScriptPath($scriptPath)) {
+                return response()->json([
+                    'error' => 'Invalid script path configuration. Please check GIT_PULL.md for setup instructions.'
+                ], 500);
+            }
+
             // Security: Validate script path exists
             if (!file_exists($scriptPath)) {
                 return response()->json([
@@ -244,10 +251,18 @@ class GitLogController extends Controller
                 ], 500);
             }
 
+            // Security: Validate repository path for shell injection
+            $repoPath = $repository->git_log_path;
+            if (!$this->isValidRepoPath($repoPath)) {
+                return response()->json([
+                    'error' => 'Invalid repository path.'
+                ], 400);
+            }
+
             // Execute git pull script with repository path as argument
             // Using sudo to run as the configured user (requires visudo configuration)
             $result = Process::timeout($timeout)
-                ->run(['sudo', $scriptPath, $repository->git_log_path]);
+                ->run(['sudo', $scriptPath, $repoPath]);
 
             if ($result->failed()) {
                 return response()->json([
@@ -291,6 +306,54 @@ class GitLogController extends Controller
             return response()->json([
                 'error' => 'Path is not a git repository'
             ], 400);
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate script path for shell injection
+     * Only allow absolute paths with alphanumeric, /, -, _, and . characters
+     */
+    private function isValidScriptPath(string $path): bool
+    {
+        // Must be absolute path
+        if (!str_starts_with($path, '/')) {
+            return false;
+        }
+
+        // Only allow safe characters in path
+        if (!preg_match('/^[a-zA-Z0-9\/_\-\.]+$/', $path)) {
+            return false;
+        }
+
+        // Prevent path traversal
+        if (str_contains($path, '..')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate repository path for shell injection
+     * Only allow absolute paths with safe characters
+     */
+    private function isValidRepoPath(string $path): bool
+    {
+        // Must be absolute path
+        if (!str_starts_with($path, '/')) {
+            return false;
+        }
+
+        // Only allow safe characters (alphanumeric, /, -, _, ., space)
+        if (!preg_match('/^[a-zA-Z0-9\/_\-\.\s]+$/', $path)) {
+            return false;
+        }
+
+        // Prevent path traversal
+        if (str_contains($path, '..')) {
+            return false;
         }
 
         return true;

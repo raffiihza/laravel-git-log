@@ -57,14 +57,13 @@ REPO_OWNER=$(stat -c '%U' "$REPO_PATH")
 echo "Pulling latest changes for repository: $REPO_PATH"
 echo "Repository owner: $REPO_OWNER"
 
-# Mark directory as safe for git operations
+# Mark directory as safe for git operations (as root first, then as repo owner)
 git config --global --add safe.directory "$REPO_PATH" 2>/dev/null || true
 
-# Perform git fetch first to check for updates
-git fetch --all 2>&1
-
-# Perform git pull
-git pull 2>&1
+# Perform git fetch and pull as the repository owner to maintain proper permissions
+echo "Running git operations as user: $REPO_OWNER"
+sudo -u "$REPO_OWNER" git -c "safe.directory=$REPO_PATH" fetch --all 2>&1
+sudo -u "$REPO_OWNER" git -c "safe.directory=$REPO_PATH" pull 2>&1
 
 echo "Git pull completed successfully"
 exit 0

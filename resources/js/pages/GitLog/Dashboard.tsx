@@ -95,14 +95,21 @@ export default function GitLogDashboard({ repositories }: Props) {
         setPullMessage('');
         
         try {
+            // Get CSRF token and validate it exists
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (!csrfToken) {
+                throw new Error('CSRF token not found. Please refresh the page and try again.');
+            }
+            
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 70000); // 70 seconds for git pull
+            // Timeout slightly longer than server-side timeout (60s default + buffer)
+            const timeoutId = setTimeout(() => controller.abort(), 70000);
             
             const response = await fetch(`/api/git-pull/${selectedRepo.id}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-CSRF-TOKEN': csrfToken,
                 },
                 signal: controller.signal
             });
