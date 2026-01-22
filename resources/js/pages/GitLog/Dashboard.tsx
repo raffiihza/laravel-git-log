@@ -95,22 +95,25 @@ export default function GitLogDashboard({ repositories }: Props) {
         setPullMessage('');
         
         try {
-            // Get CSRF token and validate it exists
+            // Get CSRF token if available (optional for public routes)
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            if (!csrfToken) {
-                throw new Error('CSRF token not found. Please refresh the page and try again.');
-            }
             
             const controller = new AbortController();
             // Timeout slightly longer than server-side timeout (60s default + buffer)
             const timeoutId = setTimeout(() => controller.abort(), 70000);
             
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            
+            // Add CSRF token if available
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+            
             const response = await fetch(`/api/git-pull/${selectedRepo.id}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                },
+                headers,
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -118,9 +121,7 @@ export default function GitLogDashboard({ repositories }: Props) {
             const data = await response.json();
             
             if (!response.ok) {
-                if (response.status === 401) {
-                    throw new Error('Please login to perform git pull.');
-                } else if (response.status === 429) {
+                if (response.status === 429) {
                     throw new Error('Rate limit exceeded. Please wait before trying again.');
                 } else if (response.status === 504) {
                     throw new Error('Git pull timed out. The repository might be large or the network is slow.');
@@ -285,16 +286,14 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                 >
                                                     {loading ? 'Refreshing...' : 'Refresh'}
                                                 </button>
-                                                {auth.user && (
-                                                    <button
-                                                        onClick={handleGitPull}
-                                                        disabled={pulling || loading}
-                                                        className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
-                                                        title="Pull latest changes from remote repository"
-                                                    >
-                                                        {pulling ? 'Pulling...' : 'Git Pull'}
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={handleGitPull}
+                                                    disabled={pulling || loading}
+                                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                                                    title="Pull latest changes from remote repository"
+                                                >
+                                                    {pulling ? 'Pulling...' : 'Git Pull'}
+                                                </button>
                                             </div>
                                         )}
                                     </div>

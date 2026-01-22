@@ -29,8 +29,9 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/api/project-logs/{projectLog}/content', [ProjectLogController::class, 'getLogContent'])->name('api.project-logs.content');
 });
 
-// Protected API route for git pull (requires authentication)
-Route::middleware(['auth', 'verified', 'throttle:10,1'])->group(function () {
+// Public API route for git pull (rate limited to 10 requests per minute)
+// Note: No authentication required - user has URL-level protection
+Route::middleware('throttle:10,1')->group(function () {
     Route::post('/api/git-pull/{repository}', [GitLogController::class, 'gitPull'])->name('api.git-pull');
 });
 
