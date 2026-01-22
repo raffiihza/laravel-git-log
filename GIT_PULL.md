@@ -4,37 +4,98 @@ This document explains how to configure the Git Pull feature in the Laravel Git 
 
 ## Overview
 
-The Git Pull feature uses a secure shell script that is executed via `sudo`. This approach ensures:
-- Only authenticated users can trigger git pull
-- The script runs with appropriate permissions
-- Repository file ownership is maintained correctly
-- Path traversal and injection attacks are prevented
+The Git Pull feature supports two execution modes:
 
-## Prerequisites
+1. **User Mode** (Recommended for simplicity) - Runs as the web server user, no root access needed
+2. **Sudo Mode** - Runs with elevated privileges via sudo/visudo
+
+## Quick Start: User Mode (Recommended)
+
+This is the simplest setup that doesn't require root access or visudo configuration.
+
+### Prerequisites
+
+- The web server user (e.g., `www-data`) must have read/write access to the repositories
+- SSH keys or git credentials must be configured for the web server user
+
+### Installation Steps
+
+#### 1. Copy the User Mode Script
+
+```bash
+sudo cp scripts/git-pull-user.sh /usr/local/bin/git-pull-user.sh
+sudo chmod 755 /usr/local/bin/git-pull-user.sh
+```
+
+#### 2. Set Repository Permissions
+
+Make sure the web server user can write to your repositories:
+
+```bash
+# Option A: Add www-data to the repository owner's group
+sudo usermod -aG your_username www-data
+
+# Option B: Change repository ownership
+sudo chown -R www-data:www-data /path/to/your/repository
+```
+
+#### 3. Configure SSH Keys (for private repositories)
+
+Set up SSH keys for the web server user:
+
+```bash
+# Create SSH directory for www-data
+sudo mkdir -p /var/www/.ssh
+sudo chown www-data:www-data /var/www/.ssh
+sudo chmod 700 /var/www/.ssh
+
+# Generate SSH key for www-data
+sudo -u www-data ssh-keygen -t ed25519 -f /var/www/.ssh/id_ed25519 -N ""
+
+# Add the public key to your Git server (GitHub, GitLab, etc.)
+sudo cat /var/www/.ssh/id_ed25519.pub
+```
+
+#### 4. Configure Environment Variables
+
+Update your `.env` file:
+
+```env
+GIT_PULL_MODE=user
+GIT_PULL_SCRIPT_PATH=/usr/local/bin/git-pull-user.sh
+GIT_PULL_TIMEOUT=60
+```
+
+#### 5. Clear Configuration Cache
+
+```bash
+php artisan config:clear
+```
+
+---
+
+## Alternative: Sudo Mode
+
+Use this mode if you need the script to run with elevated privileges (e.g., when repositories are owned by different users).
+
+### Prerequisites
 
 - Linux server (Ubuntu/Debian recommended)
 - Web server running as `www-data` user (or your configured web server user)
 - Git installed on the server
-- SSH keys or credentials configured for the repositories
+- Root access for visudo configuration
 
-## Installation Steps
+### Installation Steps
 
-### 1. Copy the Git Pull Script
-
-Copy the provided script to a system location:
+#### 1. Copy the Sudo Mode Script
 
 ```bash
 sudo cp scripts/git-pull.sh /usr/local/bin/git-pull.sh
-```
-
-### 2. Set Proper Ownership and Permissions
-
-```bash
 sudo chown root:root /usr/local/bin/git-pull.sh
 sudo chmod 755 /usr/local/bin/git-pull.sh
 ```
 
-### 3. Configure Sudoers
+#### 2. Configure Sudoers
 
 Edit the sudoers file using `visudo`:
 
@@ -50,85 +111,61 @@ www-data ALL=(ALL) NOPASSWD: /usr/local/bin/git-pull.sh
 
 > **Note:** Replace `www-data` with your web server user if different (e.g., `nginx`, `apache`, or your application user).
 
-### 4. Configure Environment Variable
+#### 3. Configure Environment Variables
 
-Update your `.env` file with the script path:
+Update your `.env` file:
 
 ```env
+GIT_PULL_MODE=sudo
 GIT_PULL_SCRIPT_PATH=/usr/local/bin/git-pull.sh
 GIT_PULL_TIMEOUT=60
 ```
 
-### 5. Clear Configuration Cache
+#### 4. Clear Configuration Cache
 
 ```bash
 php artisan config:clear
 ```
 
-## Custom Script Location
-
-If you need to use a different location for the script:
-
-1. Copy the script to your preferred location:
-   ```bash
-   sudo cp scripts/git-pull.sh /your/custom/path/git-pull.sh
-   ```
-
-2. Update ownership and permissions:
-   ```bash
-   sudo chown root:root /your/custom/path/git-pull.sh
-   sudo chmod 755 /your/custom/path/git-pull.sh
-   ```
-
-3. Update the sudoers configuration:
-   ```bash
-   sudo visudo
-   # Add: www-data ALL=(ALL) NOPASSWD: /your/custom/path/git-pull.sh
-   ```
-
-4. Update your `.env` file:
-   ```env
-   GIT_PULL_SCRIPT_PATH=/your/custom/path/git-pull.sh
-   ```
-
-5. Clear configuration cache:
-   ```bash
-   php artisan config:clear
-   ```
+---
 
 ## Security Considerations
 
-### Script Security
+### User Mode Security
 
-The `git-pull.sh` script includes several security measures:
+- The web server user must have write access to repositories
+- SSH keys should be protected with proper permissions (600)
+- Only authenticated application users can trigger git pull
+- Rate limiting (10 requests per minute) prevents abuse
 
-1. **Absolute Path Validation**: Only accepts absolute paths to prevent relative path attacks
+### Sudo Mode Security
+
+- The sudoers entry is restricted to a specific script path
+- Only the web server user can execute the script with sudo
+- NOPASSWD is limited to this single script
+- The script validates all input paths
+
+### Common Security Features
+
+Both scripts include:
+
+1. **Absolute Path Validation**: Only accepts absolute paths
 2. **Path Traversal Prevention**: Rejects paths containing `..`
 3. **Directory Validation**: Verifies the path exists and is a directory
 4. **Git Repository Validation**: Confirms the path is a valid git repository
 5. **Safe Exit**: Uses `set -euo pipefail` to fail safely on errors
 
-### Sudoers Security
-
-- The sudoers entry is restricted to a specific script path
-- Only the web server user can execute the script with sudo
-- NOPASSWD is limited to this single script
-
-### Application Security
-
-- Only authenticated users can trigger git pull
-- Rate limiting (10 requests per minute) prevents abuse
-- CSRF protection on the API endpoint
-- Timeout protection prevents hanging requests
+---
 
 ## Troubleshooting
 
 ### "Git pull script not found"
 
-Ensure the script is in the correct location and the path in `.env` matches:
+Ensure the script is in the correct location:
 
 ```bash
-ls -la /usr/local/bin/git-pull.sh
+ls -la /usr/local/bin/git-pull-user.sh  # For user mode
+ls -la /usr/local/bin/git-pull.sh       # For sudo mode
 ```
 
 ### "Git pull script is not executable"
@@ -136,34 +173,35 @@ ls -la /usr/local/bin/git-pull.sh
 Set the executable permission:
 
 ```bash
-sudo chmod 755 /usr/local/bin/git-pull.sh
+sudo chmod 755 /usr/local/bin/git-pull-user.sh
 ```
 
-### "Permission denied" or sudo errors
+### "Permission denied" errors (User Mode)
 
-1. Check visudo configuration:
+1. Check repository permissions:
    ```bash
-   sudo visudo -c
+   ls -la /path/to/repository
    ```
 
-2. Verify the web server user:
+2. Add web server user to the correct group:
    ```bash
-   ps aux | grep php
+   sudo usermod -aG your_username www-data
    ```
 
-3. Test sudo manually:
+3. Restart the web server:
    ```bash
-   sudo -u www-data sudo /usr/local/bin/git-pull.sh /path/to/repo
+   sudo systemctl restart php-fpm
+   sudo systemctl restart nginx  # or apache2
    ```
 
 ### "Authentication required" errors
 
 If your repositories require authentication:
 
-1. For SSH-based repositories, ensure SSH keys are set up for the repository owner
+1. For SSH-based repositories, ensure SSH keys are set up for the correct user
 2. For HTTPS repositories, configure git credential storage:
    ```bash
-   git config --global credential.helper store
+   sudo -u www-data git config --global credential.helper store
    ```
 
 ### Timeout errors
@@ -174,31 +212,27 @@ Increase the timeout in `.env`:
 GIT_PULL_TIMEOUT=120
 ```
 
+---
+
+## Comparison: User Mode vs Sudo Mode
+
+| Feature | User Mode | Sudo Mode |
+|---------|-----------|-----------|
+| Root access needed | No | Yes |
+| Visudo configuration | No | Yes |
+| Complexity | Simple | More complex |
+| Repository ownership | Must be writable by www-data | Can be any user |
+| Security | Less privileged | More privileged |
+
+**Recommendation**: Use **User Mode** unless you specifically need to pull repositories owned by different system users.
+
+---
+
 ## Multiple Repositories
 
 The script is designed to work with any repository path passed as an argument. Each repository configured in the application can be pulled independently.
 
 To add a new repository:
 1. Add it through the admin interface
-2. Ensure the web server user has appropriate permissions
+2. Ensure the web server user has appropriate permissions (for User Mode)
 3. Configure SSH keys or credentials as needed
-
-## Using with Different Web Server Users
-
-If your web server runs as a different user:
-
-1. Identify the user:
-   ```bash
-   ps aux | grep -E 'php|nginx|apache' | grep -v grep
-   ```
-
-2. Update the sudoers entry:
-   ```bash
-   sudo visudo
-   # Replace www-data with your user
-   ```
-
-Example for common setups:
-- Apache: `www-data` (Debian/Ubuntu) or `apache` (CentOS/RHEL)
-- Nginx with PHP-FPM: `www-data` or `nginx`
-- Laravel Valet: Your local username

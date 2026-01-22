@@ -259,10 +259,19 @@ class GitLogController extends Controller
                 ], 400);
             }
 
+            // Get execution mode (sudo or user)
+            $mode = config('gitpull.mode', 'sudo');
+
             // Execute git pull script with repository path as argument
-            // Using sudo to run as the configured user (requires visudo configuration)
-            $result = Process::timeout($timeout)
-                ->run(['sudo', $scriptPath, $repoPath]);
+            if ($mode === 'user') {
+                // User mode: Run script directly without sudo (simpler, no root needed)
+                $result = Process::timeout($timeout)
+                    ->run([$scriptPath, $repoPath]);
+            } else {
+                // Sudo mode: Run script with sudo (requires visudo configuration)
+                $result = Process::timeout($timeout)
+                    ->run(['sudo', $scriptPath, $repoPath]);
+            }
 
             if ($result->failed()) {
                 return response()->json([
