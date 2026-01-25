@@ -162,13 +162,8 @@ class ProjectLogController extends Controller
         try {
             $content = File::get($filePath);
             
-            // Reverse the content (newest entries at top)
-            $lines = explode("\n", $content);
-            $reversedLines = array_reverse($lines);
-            $reversedContent = implode("\n", $reversedLines);
-            
             return response()->json([
-                'content' => $reversedContent,
+                'content' => $content,
                 'filename' => $filename,
                 'size' => File::size($filePath),
                 'modified' => date('Y-m-d H:i:s', File::lastModified($filePath)),
@@ -239,15 +234,10 @@ class ProjectLogController extends Controller
         try {
             $content = File::get($filePath);
             
-            // Reverse the content (newest entries at top)
-            $lines = explode("\n", $content);
-            $reversedLines = array_reverse($lines);
-            $reversedContent = implode("\n", $reversedLines);
-            
             return Inertia::render('ProjectLogs/ViewLog', [
                 'projectLog' => $projectLog,
                 'filename' => $filename,
-                'content' => $reversedContent,
+                'content' => $content,
                 'size' => File::size($filePath),
                 'modified' => date('Y-m-d H:i:s', File::lastModified($filePath)),
             ]);
