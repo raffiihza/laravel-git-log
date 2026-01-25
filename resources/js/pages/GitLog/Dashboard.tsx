@@ -26,13 +26,16 @@ export default function GitLogDashboard({ repositories }: Props) {
     const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
     const [gitLogData, setGitLogData] = useState<string>('');
     const [loading, setLoading] = useState(false);
+    const [pulling, setPulling] = useState(false);
     const [error, setError] = useState<string>('');
+    const [pullMessage, setPullMessage] = useState<string>('');
     const [viewMode, setViewMode] = useState<'simple' | 'detailed' | 'complete'>('simple');
     const [showAllBranches, setShowAllBranches] = useState(false);
 
     const fetchGitLog = async (repository: Repository, mode: 'simple' | 'detailed' | 'complete' = 'simple', allBranches: boolean = false) => {
         setLoading(true);
         setError('');
+        setPullMessage('');
         
         try {
             let endpoint = `/api/git-log/${repository.id}`;
@@ -81,6 +84,58 @@ export default function GitLogDashboard({ repositories }: Props) {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGitPull = async () => {
+        if (!selectedRepo) return;
+        
+        setPulling(true);
+        setError('');
+        setPullMessage('');
+        
+        try {
+            const controller = new AbortController();
+            // Timeout slightly longer than server-side timeout (60s default + buffer)
+            const timeoutId = setTimeout(() => controller.abort(), 70000);
+            
+            const response = await fetch(`/api/git-pull/${selectedRepo.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please wait before trying again.');
+                } else if (response.status === 504) {
+                    throw new Error('Git pull timed out. The repository might be large or the network is slow.');
+                }
+                throw new Error(data.error || 'Failed to perform git pull');
+            }
+            
+            setPullMessage(data.message || 'Git pull completed successfully');
+            
+            // Refresh the git log after successful pull
+            await fetchGitLog(selectedRepo, viewMode, showAllBranches);
+        } catch (err) {
+            if (err instanceof Error) {
+                if (err.name === 'AbortError') {
+                    setError('Git pull request timed out. Please try again.');
+                } else {
+                    setError(err.message);
+                }
+            } else {
+                setError('An error occurred during git pull');
+            }
+        } finally {
+            setPulling(false);
         }
     };
 
@@ -222,9 +277,23 @@ export default function GitLogDashboard({ repositories }: Props) {
                                                 >
                                                     {loading ? 'Refreshing...' : 'Refresh'}
                                                 </button>
+                                                <button
+                                                    onClick={handleGitPull}
+                                                    disabled={pulling || loading}
+                                                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                                                    title="Pull latest changes from remote repository"
+                                                >
+                                                    {pulling ? 'Pulling...' : 'Git Pull'}
+                                                </button>
                                             </div>
                                         )}
                                     </div>
+
+                                    {pullMessage && (
+                                        <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+                                            {pullMessage}
+                                        </div>
+                                    )}
 
                                     {error && (
                                         <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">

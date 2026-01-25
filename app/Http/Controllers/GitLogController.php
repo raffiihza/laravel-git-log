@@ -215,6 +215,105 @@ class GitLogController extends Controller
     }
 
     /**
+     * Execute git pull for a specific repository
+     * Protected route - requires authentication
+     */
+    public function gitPull(Repository $repository)
+    {
+        try {
+            $validation = $this->validateRepository($repository->git_log_path);
+            if ($validation !== true) {
+                return $validation;
+            }
+
+            $scriptPath = config('gitpull.script_path');
+            $timeout = config('gitpull.timeout', 60);
+
+            // Security: Validate script path doesn't contain shell injection characters
+            if (!$this->isValidScriptPath($scriptPath)) {
+                return response()->json([
+                    'error' => 'Invalid script path configuration. Please check GIT_PULL.md for setup instructions.'
+                ], 500);
+            }
+
+            // Security: Validate script path exists
+            if (!file_exists($scriptPath)) {
+                return response()->json([
+                    'error' => 'Git pull script not found. Please check GIT_PULL.md for setup instructions.',
+                    'script_path' => $scriptPath
+                ], 500);
+            }
+
+            // Security: Validate script is executable
+            if (!is_executable($scriptPath)) {
+                return response()->json([
+                    'error' => 'Git pull script is not executable. Please check GIT_PULL.md for setup instructions.'
+                ], 500);
+            }
+
+            // Security: Validate repository path for shell injection
+            $repoPath = $repository->git_log_path;
+            if (!$this->isValidRepoPath($repoPath)) {
+                return response()->json([
+                    'error' => 'Invalid repository path.'
+                ], 400);
+            }
+
+            // Get execution mode and user
+            $mode = config('gitpull.mode', 'user');
+            $targetUser = config('gitpull.user', 'www-data');
+
+            // Security: Validate target user for shell injection
+            if ($mode === 'user' && !$this->isValidUsername($targetUser)) {
+                return response()->json([
+                    'error' => 'Invalid GIT_PULL_USER configuration. Username must contain only alphanumeric characters, underscores, or hyphens.'
+                ], 500);
+            }
+
+            // Execute git pull script with repository path as argument
+            if ($mode === 'direct') {
+                // Direct mode: Run script directly without sudo
+                $result = Process::timeout($timeout)
+                    ->run([$scriptPath, $repoPath]);
+            } elseif ($mode === 'user') {
+                // User mode: Run script with sudo as a specific user (not root)
+                // Requires visudo: www-data ALL=(targetUser) NOPASSWD: /path/to/script
+                $result = Process::timeout($timeout)
+                    ->run(['sudo', '-u', $targetUser, $scriptPath, $repoPath]);
+            } else {
+                // Sudo mode: Run script with sudo as root
+                // Requires visudo: www-data ALL=(ALL) NOPASSWD: /path/to/script
+                $result = Process::timeout($timeout)
+                    ->run(['sudo', $scriptPath, $repoPath]);
+            }
+
+            if ($result->failed()) {
+                return response()->json([
+                    'error' => 'Git pull failed: ' . $result->errorOutput(),
+                    'output' => $result->output()
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Git pull completed successfully',
+                'repository' => $repository->only(['id', 'name', 'description']),
+                'output' => $result->output(),
+                'timestamp' => now()->toISOString()
+            ]);
+
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException $e) {
+            return response()->json([
+                'error' => 'Git pull timed out. The repository might be large or the network is slow.'
+            ], 504);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Validate repository path and git directory
      * Returns true if valid, JsonResponse if invalid
      */
@@ -233,5 +332,64 @@ class GitLogController extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * Validate script path for shell injection
+     * Only allow absolute paths with alphanumeric, /, -, _, and . characters
+     */
+    private function isValidScriptPath(string $path): bool
+    {
+        // Must be absolute path
+        if (!str_starts_with($path, '/')) {
+            return false;
+        }
+
+        // Only allow safe characters in path
+        if (!preg_match('/^[a-zA-Z0-9\/_\-\.]+$/', $path)) {
+            return false;
+        }
+
+        // Prevent path traversal
+        if (str_contains($path, '..')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate repository path for shell injection
+     * Only allow absolute paths with safe characters
+     */
+    private function isValidRepoPath(string $path): bool
+    {
+        // Must be absolute path
+        if (!str_starts_with($path, '/')) {
+            return false;
+        }
+
+        // Only allow safe characters (alphanumeric, /, -, _, ., space)
+        if (!preg_match('/^[a-zA-Z0-9\/_\-\.\s]+$/', $path)) {
+            return false;
+        }
+
+        // Prevent path traversal
+        if (str_contains($path, '..')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate username for shell injection
+     * Only allow safe characters (alphanumeric, underscore, hyphen)
+     */
+    private function isValidUsername(string $username): bool
+    {
+        // Username must only contain alphanumeric, underscore, or hyphen
+        // This matches standard Linux username conventions
+        return preg_match('/^[a-zA-Z0-9_\-]+$/', $username) === 1;
     }
 }
