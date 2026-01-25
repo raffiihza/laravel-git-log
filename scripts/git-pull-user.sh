@@ -54,7 +54,7 @@ echo "Pulling latest changes for repository: $REPO_PATH"
 # Perform git fetch first to check for updates
 # Use -c option to set safe.directory for this command only (not global)
 echo "Fetching updates..."
-git -c "safe.directory=$REPO_PATH" fetch --all 2>&1
+git -c "safe.directory=$REPO_PATH" fetch 2>&1
 
 # Perform git pull
 echo "Pulling changes..."

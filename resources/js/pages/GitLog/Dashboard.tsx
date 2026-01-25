@@ -95,25 +95,16 @@ export default function GitLogDashboard({ repositories }: Props) {
         setPullMessage('');
         
         try {
-            // Get CSRF token if available (optional for public routes)
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-            
             const controller = new AbortController();
             // Timeout slightly longer than server-side timeout (60s default + buffer)
             const timeoutId = setTimeout(() => controller.abort(), 70000);
             
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-            };
-            
-            // Add CSRF token if available
-            if (csrfToken) {
-                headers['X-CSRF-TOKEN'] = csrfToken;
-            }
-            
             const response = await fetch(`/api/git-pull/${selectedRepo.id}`, {
                 method: 'POST',
-                headers,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
                 signal: controller.signal
             });
             clearTimeout(timeoutId);

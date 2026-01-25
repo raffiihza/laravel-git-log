@@ -19,22 +19,6 @@ Route::get('/project-logs', [ProjectLogController::class, 'publicIndex'])->name(
 // Public route for viewing individual log file
 Route::get('/project-logs/{projectLog}/view', [ProjectLogController::class, 'viewLogFile'])->name('project-logs.view');
 
-// API routes for git log data (public but rate limited)
-Route::middleware('throttle:30,1')->group(function () {
-    Route::get('/api/git-log/{repository}', [GitLogController::class, 'getGitLog'])->name('api.git-log');
-    Route::get('/api/git-log/{repository}/detailed', [GitLogController::class, 'getDetailedGitLog'])->name('api.git-log.detailed');
-    Route::get('/api/git-log/{repository}/complete', [GitLogController::class, 'getCompleteGitLog'])->name('api.git-log.complete');
-    Route::get('/api/frontend/folders', [FrontendController::class, 'getFolders'])->name('api.frontend.folders');
-    Route::get('/api/project-logs/{projectLog}/files', [ProjectLogController::class, 'getPublicLogFiles'])->name('api.project-logs.files');
-    Route::get('/api/project-logs/{projectLog}/content', [ProjectLogController::class, 'getLogContent'])->name('api.project-logs.content');
-});
-
-// Public API route for git pull (rate limited to 10 requests per minute)
-// Note: No authentication required - user has URL-level protection
-Route::middleware('throttle:10,1')->group(function () {
-    Route::post('/api/git-pull/{repository}', [GitLogController::class, 'gitPull'])->name('api.git-pull');
-});
-
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
         return Inertia::render('dashboard');

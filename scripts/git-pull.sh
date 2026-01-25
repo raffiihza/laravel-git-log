@@ -62,7 +62,7 @@ git config --global --add safe.directory "$REPO_PATH" 2>/dev/null || true
 
 # Perform git fetch and pull as the repository owner to maintain proper permissions
 echo "Running git operations as user: $REPO_OWNER"
-sudo -u "$REPO_OWNER" git -c "safe.directory=$REPO_PATH" fetch --all 2>&1
+sudo -u "$REPO_OWNER" git -c "safe.directory=$REPO_PATH" fetch 2>&1
 sudo -u "$REPO_OWNER" git -c "safe.directory=$REPO_PATH" pull 2>&1
 
 echo "Git pull completed successfully"
